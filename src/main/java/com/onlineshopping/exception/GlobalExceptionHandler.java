@@ -25,6 +25,13 @@ public class GlobalExceptionHandler {
         return new ErrorResponse(400, "Validation failed", errors, LocalDateTime.now());
     }
 
+    // Bad request (e.g., duplicate username, invalid credentials)
+    @ExceptionHandler(BadRequestException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ErrorResponse handleBadRequest(BadRequestException ex) {
+        return new ErrorResponse(400, ex.getMessage(), null, LocalDateTime.now());
+    }
+
     // Resource not found (e.g., product/category not found)
     @ExceptionHandler(ResourceNotFoundException.class)
     @ResponseStatus(HttpStatus.NOT_FOUND)
