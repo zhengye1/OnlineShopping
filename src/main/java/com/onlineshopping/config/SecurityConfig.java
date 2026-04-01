@@ -39,6 +39,7 @@ public class SecurityConfig {
                         // Public endpoints — 唔使login
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/health").permitAll()
+                        .requestMatchers("/api/payments/callback").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/products/**").permitAll()
 
                         // Admin only
