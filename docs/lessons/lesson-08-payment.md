@@ -166,6 +166,235 @@ POST   /api/payments/callback     → PaymentResponse (无需login, 200)
 
 ---
 
+## 附录：实际Payment Provider Integration参考
+
+### Dependencies (pom.xml)
+
+```xml
+<!-- Stripe -->
+<dependency>
+    <groupId>com.stripe</groupId>
+    <artifactId>stripe-java</artifactId>
+    <version>26.0.0</version>
+</dependency>
+
+<!-- PayPal -->
+<dependency>
+    <groupId>com.paypal.sdk</groupId>
+    <artifactId>checkout-sdk</artifactId>
+    <version>2.0.0</version>
+</dependency>
+```
+
+### application.properties
+
+```properties
+# Stripe
+stripe.api-key=${STRIPE_API_KEY}
+stripe.webhook-secret=${STRIPE_WEBHOOK_SECRET}
+
+# PayPal
+paypal.client-id=${PAYPAL_CLIENT_ID}
+paypal.client-secret=${PAYPAL_CLIENT_SECRET}
+paypal.mode=sandbox  # sandbox / live
+```
+
+### Strategy Pattern — 统一interface
+
+多个payment provider用Strategy Pattern，加新provider唔使改现有代码（Open-Closed Principle）。
+
+```java
+public interface PaymentProvider {
+    String createCheckout(Order order, long amount);     // 返回payment URL
+    boolean verifyCallback(String payload, String signature);  // 验证签名
+}
+```
+
+### Stripe实现
+
+```java
+@Service("stripe")
+public class StripePaymentProvider implements PaymentProvider {
+
+    @Value("${stripe.api-key}")
+    private String apiKey;
+
+    @Value("${stripe.webhook-secret}")
+    private String webhookSecret;
+
+    @Override
+    public String createCheckout(Order order, long amount) {
+        Stripe.apiKey = apiKey;
+
+        SessionCreateParams params = SessionCreateParams.builder()
+            .setMode(SessionCreateParams.Mode.PAYMENT)
+            .setSuccessUrl("https://yoursite.com/payment/success?orderId=" + order.getId())
+            .setCancelUrl("https://yoursite.com/payment/cancel?orderId=" + order.getId())
+            .addLineItem(SessionCreateParams.LineItem.builder()
+                .setPriceData(SessionCreateParams.LineItem.PriceData.builder()
+                    .setCurrency("cad")
+                    .setUnitAmount(amount)  // cents
+                    .setProductData(SessionCreateParams.LineItem.PriceData.ProductData.builder()
+                        .setName("Order #" + order.getId())
+                        .build())
+                    .build())
+                .setQuantity(1L)
+                .build())
+            .putMetadata("orderId", order.getId().toString())
+            .build();
+
+        Session session = Session.create(params);
+        return session.getUrl();  // 前端redirect去呢个URL
+    }
+
+    @Override
+    public boolean verifyCallback(String payload, String sigHeader) {
+        try {
+            Webhook.constructEvent(payload, sigHeader, webhookSecret);
+            return true;
+        } catch (SignatureVerificationException e) {
+            return false;
+        }
+    }
+}
+```
+
+### PayPal实现
+
+```java
+@Service("paypal")
+public class PayPalPaymentProvider implements PaymentProvider {
+
+    @Value("${paypal.client-id}")
+    private String clientId;
+
+    @Value("${paypal.client-secret}")
+    private String clientSecret;
+
+    @Value("${paypal.mode}")
+    private String mode;
+
+    private PayPalEnvironment getEnvironment() {
+        return "live".equals(mode)
+            ? new PayPalEnvironment.Live(clientId, clientSecret)
+            : new PayPalEnvironment.Sandbox(clientId, clientSecret);
+    }
+
+    @Override
+    public String createCheckout(Order order, long amount) {
+        PayPalHttpClient client = new PayPalHttpClient(getEnvironment());
+
+        OrdersCreateRequest request = new OrdersCreateRequest();
+        request.prefer("return=representation");
+
+        // amount从cents转dollars (PayPal用dollars string)
+        String dollarAmount = BigDecimal.valueOf(amount)
+            .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP)
+            .toString();
+
+        OrderRequest orderRequest = new OrderRequest()
+            .checkoutPaymentIntent("CAPTURE")
+            .purchaseUnits(List.of(
+                new PurchaseUnitRequest()
+                    .amountWithBreakdown(new AmountWithBreakdown()
+                        .currencyCode("CAD")
+                        .value(dollarAmount))
+                    .referenceId(order.getId().toString())
+            ));
+
+        request.requestBody(orderRequest);
+        HttpResponse<com.paypal.orders.Order> response = client.execute(request);
+
+        // 搵approval link
+        return response.result().links().stream()
+            .filter(link -> "approve".equals(link.rel()))
+            .findFirst()
+            .map(LinkDescription::href)
+            .orElseThrow();
+    }
+
+    @Override
+    public boolean verifyCallback(String payload, String signature) {
+        // PayPal webhook signature verification
+        // 用PayPal SDK验证
+        return true; // 简化示意
+    }
+}
+```
+
+### PaymentService — 动态选择provider
+
+```java
+@Service
+public class PaymentService {
+    private final Map<String, PaymentProvider> providers;
+
+    // Spring自动inject所有PaymentProvider实现
+    // key = bean name ("stripe", "paypal")
+    public PaymentService(Map<String, PaymentProvider> providers, ...) {
+        this.providers = providers;
+    }
+
+    public PaymentResponse createPayment(Long orderId, String method) {
+        PaymentProvider provider = providers.get(method);
+        if (provider == null) throw new BadRequestException("Unsupported payment method");
+
+        // ...验证order状态、计算amount...
+
+        String checkoutUrl = provider.createCheckout(order, amount);
+        payment.setPaymentMethod(method);
+        // ...save payment, return response with checkoutUrl...
+    }
+}
+```
+
+### Callback endpoints — 每个provider分开
+
+```java
+@PostMapping("/callback/stripe")
+public void stripeCallback(
+        @RequestBody String payload,
+        @RequestHeader("Stripe-Signature") String sigHeader) {
+    PaymentProvider provider = providers.get("stripe");
+    if (!provider.verifyCallback(payload, sigHeader)) {
+        throw new BadRequestException("Invalid signature");
+    }
+    // ...parse event, 更新payment + order status...
+}
+
+@PostMapping("/callback/paypal")
+public void paypalCallback(
+        @RequestBody String payload,
+        @RequestHeader("Paypal-Transmission-Sig") String sigHeader) {
+    PaymentProvider provider = providers.get("paypal");
+    if (!provider.verifyCallback(payload, sigHeader)) {
+        throw new BadRequestException("Invalid signature");
+    }
+    // ...parse event, 更新payment + order status...
+}
+```
+
+### SecurityConfig放行
+
+```java
+.requestMatchers("/api/payments/callback/**").permitAll()
+```
+
+### 完整flow总结
+
+```
+1. 前端call POST /api/payments/{orderId}?method=stripe
+2. Backend创建PENDING payment + call Stripe API
+3. Backend返回 { checkoutUrl: "https://checkout.stripe.com/..." }
+4. 前端redirect buyer去checkoutUrl
+5. Buyer系Stripe页面付款
+6. Stripe call POST /api/payments/callback/stripe
+7. Backend验证signature → 更新payment SUCCESS → order PAID
+8. Buyer被redirect返success page
+```
+
+---
+
 ## 下课预告：Lesson 9 — Redis Cache
 - Redis基础概念
 - Spring Data Redis integration
