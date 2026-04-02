@@ -55,6 +55,13 @@
             <artifactId>spring-boot-starter-security</artifactId>
         </dependency>
 
+        <!-- Redis dependency -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+
+
         <!-- JWT (jjwt library) -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
@@ -73,7 +80,6 @@
             <version>0.13.0</version>
             <scope>runtime</scope>
         </dependency>
-
         <!-- Lombok: auto-generate getters/setters/constructors -->
         <dependency>
             <groupId>org.projectlombok</groupId>

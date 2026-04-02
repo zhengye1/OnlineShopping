@@ -15,8 +15,12 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 @Service
 public class ProductService {
@@ -24,24 +28,34 @@ public class ProductService {
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
     private final UserRepository userRepository;
+    private final RedisTemplate<String, Object> redisTemplate;
 
     public ProductService(ProductRepository productRepository,
                           CategoryRepository categoryRepository,
-                          UserRepository userRepository) {
+                          UserRepository userRepository,
+                          RedisTemplate<String, Object> redisTemplate) {
         this.productRepository = productRepository;
         this.categoryRepository = categoryRepository;
         this.userRepository = userRepository;
+        this.redisTemplate = redisTemplate;
     }
 
     // Paginated listing — public, only ON_SALE products
+    @SuppressWarnings("unchecked")
     public PageResponse<ProductResponse> getAllProducts(int page, int size, String sortBy, String direction) {
+        String redisKey = "product:page" + page + ":size:"+size+":sorted:"+sortBy+":dir:"+direction;
+        Object cached = redisTemplate.opsForValue().get(redisKey);
+
+        if (cached != null) return (PageResponse<ProductResponse>) cached;
         Sort sort = direction.equalsIgnoreCase("desc")
                 ? Sort.by(sortBy).descending()
                 : Sort.by(sortBy).ascending();
         Pageable pageable = PageRequest.of(page, size, sort);
 
         Page<Product> productPage = productRepository.findByStatus(ProductStatus.ON_SALE, pageable);
-        return toPageResponse(productPage);
+        PageResponse<ProductResponse> response = toPageResponse(productPage);
+        redisTemplate.opsForValue().set(redisKey, response, 5, TimeUnit.MINUTES);
+        return response;
     }
 
     // Search with filters — public
@@ -56,9 +70,16 @@ public class ProductService {
     }
 
     public ProductResponse getProductById(Long id) {
+        String redisKey = "product:" + id;
+        Object cached = redisTemplate.opsForValue().get(redisKey);
+        if (cached != null) return (ProductResponse) cached;
         Product product = productRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Product not found with id: " + id));
-        return toResponse(product);
+
+        // save to redis and set ttl
+        ProductResponse response = toResponse(product);
+        redisTemplate.opsForValue().set(redisKey, response, 30, TimeUnit.MINUTES);
+        return response;
     }
 
     // Create product — automatically assign current user as seller
@@ -97,6 +118,7 @@ public class ProductService {
         product.setImageUrl(request.getImageUrl());
 
         Product saved = productRepository.save(product);
+        this.redisTemplate.delete("product:" + id);
         return toResponse(saved);
     }
 
@@ -104,6 +126,7 @@ public class ProductService {
         Product product = productRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Product not found with id: " + id));
         productRepository.delete(product);
+        this.redisTemplate.delete("product:" + id);
     }
 
     // Get current authenticated user from SecurityContext
@@ -140,7 +163,7 @@ public class ProductService {
     // Page<Entity> → PageResponse<DTO>
     private PageResponse<ProductResponse> toPageResponse(Page<Product> productPage) {
         return new PageResponse<>(
-                productPage.getContent().stream().map(this::toResponse).toList(),
+                productPage.getContent().stream().map(this::toResponse).collect(Collectors.toList()),
                 productPage.getNumber(),
                 productPage.getSize(),
                 productPage.getTotalElements(),
