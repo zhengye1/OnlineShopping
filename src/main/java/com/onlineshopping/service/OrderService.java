@@ -1,5 +1,6 @@
 package com.onlineshopping.service;
 
+import com.onlineshopping.dto.OrderEvent;
 import com.onlineshopping.dto.OrderItemResponse;
 import com.onlineshopping.dto.OrderRequest;
 import com.onlineshopping.dto.OrderResponse;
@@ -25,17 +26,17 @@ public class OrderService {
     private final UserRepository userRepository;
     private final CartItemRepository cartItemRepository;
     private final OrderRepository orderRepository;
-    private final OrderItemRepository orderItemRepository;
+    private final OrderMessageProducer orderMessageProducer;
     private final RedisService redisService;
     public OrderService(UserRepository userRepository,
                         CartItemRepository cartItemRepository,
                         OrderRepository orderRepository,
-                        OrderItemRepository orderItemRepository,
+                        OrderMessageProducer orderMessageProducer,
                         RedisService redisService){
         this.userRepository = userRepository;
         this.cartItemRepository = cartItemRepository;
         this.orderRepository = orderRepository;
-        this.orderItemRepository = orderItemRepository;
+        this.orderMessageProducer = orderMessageProducer;
         this.redisService = redisService;
     }
     public List<OrderResponse> getMyOrder(){
@@ -106,7 +107,13 @@ public class OrderService {
 
         // 7. 清空购物车
         this.cartItemRepository.deleteByUserId(user.getId());
-        // 8. Return response
+        // 8. send message去queue
+        OrderEvent event = new OrderEvent();
+        event.setOrderId(order.getId());
+        event.setOrderStatus(order.getOrderStatus().name());
+        event.setUserId(user.getId());
+        this.orderMessageProducer.sendOrderMessage(event);
+        // 9. Return response
         return toOrderResponse(order);
     }
 
