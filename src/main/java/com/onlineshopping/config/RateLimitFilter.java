@@ -23,6 +23,10 @@ public class RateLimitFilter extends OncePerRequestFilter {
         boolean isLimited = redisService.isRateLimited("rate:"+ip, 30, 60);
         if (isLimited) {
             response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
+            response.setContentType("application/json");
+            response.getWriter().write("{\"status\":429, " +
+                    "\"message\": \"Too Many Requests, please try again later\"}");
+
             return;
         }
         filterChain.doFilter(request ,response);
