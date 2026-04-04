@@ -26,14 +26,17 @@ public class OrderService {
     private final CartItemRepository cartItemRepository;
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
+    private final RedisService redisService;
     public OrderService(UserRepository userRepository,
                         CartItemRepository cartItemRepository,
                         OrderRepository orderRepository,
-                        OrderItemRepository orderItemRepository){
+                        OrderItemRepository orderItemRepository,
+                        RedisService redisService){
         this.userRepository = userRepository;
         this.cartItemRepository = cartItemRepository;
         this.orderRepository = orderRepository;
         this.orderItemRepository = orderItemRepository;
+        this.redisService = redisService;
     }
     public List<OrderResponse> getMyOrder(){
         User user = getCurrentUser();
@@ -72,11 +75,20 @@ public class OrderService {
         for (CartItem item: items){
             Product product = item.getProduct();
             if (!product.getStatus().equals(ProductStatus.ON_SALE)) throw new BadRequestException("Product is not on sale");
-            if (product.getStock() < item.getQuantity()) throw new BadRequestException("Not enough stock");
+
             OrderItem orderItem = new OrderItem();
             orderItem.setProduct(product);
             orderItem.setProductName(product.getName());
-            product.setStock(product.getStock() - item.getQuantity());
+            String lockKey = "lock:product:" + product.getId();
+            boolean locked = redisService.tryLock(lockKey, 10);
+            if (!locked) throw new BadRequestException("System busy, please try again");
+            try {
+                // 扣库存逻辑
+                if (product.getStock() < item.getQuantity()) throw new BadRequestException("Not enough stock");
+                product.setStock(product.getStock() - item.getQuantity());
+            } finally {
+                redisService.unlock(lockKey);  // 一定要释放锁
+            }
             orderItem.setProductPrice(product.getPrice());
             orderItem.setOrder(order);
             orderItem.setQuantity(item.getQuantity());

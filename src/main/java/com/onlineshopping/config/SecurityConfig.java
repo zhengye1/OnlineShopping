@@ -22,11 +22,13 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final SecurityExceptionHandler securityExceptionHandler;
+    private final RateLimitFilter rateLimitFilter;
 
     public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter,
-                          SecurityExceptionHandler securityExceptionHandler) {
+                          SecurityExceptionHandler securityExceptionHandler, RateLimitFilter rateLimitFilter) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.securityExceptionHandler = securityExceptionHandler;
+        this.rateLimitFilter = rateLimitFilter;
     }
 
     @Bean
@@ -52,7 +54,8 @@ public class SecurityConfig {
                         .authenticationEntryPoint(securityExceptionHandler)   // 401
                         .accessDeniedHandler(securityExceptionHandler)        // 403
                 )
-                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(rateLimitFilter, jwtAuthenticationFilter.getClass());
 
         return http.build();
     }
