@@ -1,9 +1,6 @@
 package com.onlineshopping.service;
 
-import com.onlineshopping.dto.OrderEvent;
-import com.onlineshopping.dto.OrderItemResponse;
-import com.onlineshopping.dto.OrderRequest;
-import com.onlineshopping.dto.OrderResponse;
+import com.onlineshopping.dto.*;
 import com.onlineshopping.enums.ProductStatus;
 import com.onlineshopping.exception.BadRequestException;
 import com.onlineshopping.exception.ResourceNotFoundException;
@@ -55,11 +52,24 @@ public class OrderService {
         return toOrderResponse(order);
     }
 
-    @Transactional
-    public OrderResponse checkout(OrderRequest request) {
+    public void checkout(OrderRequest request) {
+        CheckoutCommand command = new CheckoutCommand();
+        command.setRequest(request);
         User user = getCurrentUser();
+        command.setUserId(user.getId());
+        OrderEvent event = new OrderEvent();
+        event.setOrderStatus("PENDING_PAYMENT");
+        event.setUserId(user.getId());
+        orderMessageProducer.sendOrderMessage(event, command);
+
+    }
+
+    @Transactional
+    public Order doCheckout(CheckoutCommand command){
+        User user = userRepository.findById(command.getUserId())
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
         // 1. 拎购物车所有items
-        List<CartItem> items = this.cartItemRepository.findByUserId(user.getId());
+        List<CartItem> items = this.cartItemRepository.findByUserId(command.getUserId());
         // 2. 验证购物车非空
         if (items.isEmpty()) throw new BadRequestException("Cart is empty");
 
@@ -98,7 +108,7 @@ public class OrderService {
         }
         // 5. Set order的totalPrice, tax等
         order.setUser(user);
-        order.setShippingAddress(request.getShippingAddress());
+        order.setShippingAddress(command.getRequest().getShippingAddress());
         order.setOrderStatus(PENDING_PAYMENT);
         order.setTotalPrice(subtotal);
 
@@ -107,14 +117,13 @@ public class OrderService {
 
         // 7. 清空购物车
         this.cartItemRepository.deleteByUserId(user.getId());
-        // 8. send message去queue
-        OrderEvent event = new OrderEvent();
-        event.setOrderId(order.getId());
-        event.setOrderStatus(order.getOrderStatus().name());
-        event.setUserId(user.getId());
-        this.orderMessageProducer.sendOrderMessage(event);
-        // 9. Return response
-        return toOrderResponse(order);
+        // 8. Return response
+        return order;
+    }
+
+
+    public boolean checkOrderExists(Long orderId) {
+        return orderRepository.existsById(orderId);
     }
 
     @Transactional

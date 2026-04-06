@@ -8,6 +8,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/orders")
@@ -27,9 +28,10 @@ public class OrderController {
     }
 
     @PostMapping("/checkout")
-    @ResponseStatus(HttpStatus.CREATED)
-    public OrderResponse checkout(@Valid @RequestBody OrderRequest orderRequest){
-        return this.orderService.checkout(orderRequest);
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public Map<String, String> checkout(@Valid @RequestBody OrderRequest orderRequest){
+        this.orderService.checkout(orderRequest);
+        return Map.of("message", "Order is being processed");
     }
 
     @PutMapping("/{id}/cancel")
