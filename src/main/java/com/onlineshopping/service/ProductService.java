@@ -11,7 +11,7 @@ import com.onlineshopping.model.Product;
 import com.onlineshopping.model.User;
 import com.onlineshopping.repository.CategoryRepository;
 import com.onlineshopping.repository.ProductRepository;
-import com.onlineshopping.repository.ProductSearchRepository;
+import com.onlineshopping.repository.es.ProductSearchRepository;
 import com.onlineshopping.repository.UserRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;

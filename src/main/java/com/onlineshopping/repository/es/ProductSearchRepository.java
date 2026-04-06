@@ -1,4 +1,4 @@
-package com.onlineshopping.repository;
+package com.onlineshopping.repository.es;
 
 import com.onlineshopping.document.ProductDocument;
 import org.springframework.data.elasticsearch.repository.ElasticsearchRepository;

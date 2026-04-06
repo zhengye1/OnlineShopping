@@ -23,13 +23,3 @@ services:
       - JAVA_OPT_EXT=-Xms256m -Xmx256m
     volumes:
       - ./broker.conf:/home/rocketmq/rocketmq-5.3.1/conf/broker.conf
-
-  elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.17.0
-    container_name: elasticsearch
-    ports:
-      - "9201:9200"
-    environment:
-      - discovery.type=single-node
-      - xpack.security.enabled=false
-      - ES_JAVA_OPTS=-Xms256m -Xmx256m
