@@ -65,7 +65,7 @@ public class OrderService {
     }
 
     @Transactional
-    public Order doCheckout(CheckoutCommand command){
+    public void doCheckout(CheckoutCommand command){
         User user = userRepository.findById(command.getUserId())
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
         // 1. 拎购物车所有items
@@ -117,8 +117,7 @@ public class OrderService {
 
         // 7. 清空购物车
         this.cartItemRepository.deleteByUserId(user.getId());
-        // 8. Return response
-        return order;
+        // 8. Done
     }
 
 
