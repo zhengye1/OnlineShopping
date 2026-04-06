@@ -1,21 +1,28 @@
 package com.onlineshopping.controller;
 
+import com.onlineshopping.document.ProductDocument;
 import com.onlineshopping.dto.PageResponse;
 import com.onlineshopping.dto.ProductRequest;
 import com.onlineshopping.dto.ProductResponse;
+import com.onlineshopping.service.ProductSearchService;
 import com.onlineshopping.service.ProductService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 
 @RestController
 @RequestMapping("/api/products")
 public class ProductController {
     private final ProductService productService;
+    private final ProductSearchService productSearchService;
 
-    public ProductController(ProductService productService) {
+    public ProductController(ProductService productService,
+                             ProductSearchService productSearchService) {
         this.productService = productService;
+        this.productSearchService = productSearchService;
     }
 
     @GetMapping
@@ -56,6 +63,11 @@ public class ProductController {
                                                 @RequestParam(defaultValue = "0") int page,
                                                 @RequestParam(defaultValue = "10") int size){
         return this.productService.searchProducts(keyword, categoryId, minPrice, maxPrice, page, size);
+    }
+
+    @GetMapping("/search/es")
+    public List<ProductDocument> searchES(@RequestParam String keyword) {
+        return productSearchService.searchProducts(keyword);
     }
 
 }
