@@ -23,3 +23,29 @@ services:
       - JAVA_OPT_EXT=-Xms256m -Xmx256m
     volumes:
       - ./broker.conf:/home/rocketmq/rocketmq-5.3.1/conf/broker.conf
+
+  mysql-shard0:
+    image: mysql:8.0
+    container_name: mysql-shard0
+    ports:
+      - "3307:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: online_shopping_shard0
+    volumes:
+      - mysql-shard0-data:/var/lib/mysql
+
+  mysql-shard1:
+    image: mysql:8.0
+    container_name: mysql-shard1
+    ports:
+      - "3308:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: online_shopping_shard1
+    volumes:
+      - mysql-shard1-data:/var/lib/mysql
+
+volumes:
+  mysql-shard0-data:
+  mysql-shard1-data:
