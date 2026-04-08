@@ -69,7 +69,7 @@ App  ──[metrics push]──→ Dashboard (8858)
 <dependency>
     <groupId>com.alibaba.cloud</groupId>
     <artifactId>spring-cloud-starter-alibaba-sentinel</artifactId>
-    <version>2023.0.1.2</version>
+    <version>2025.0.0.0</version>
 </dependency>
 ```
 
@@ -78,10 +78,9 @@ App  ──[metrics push]──→ Dashboard (8858)
 spring.cloud.sentinel.transport.dashboard=localhost:8858
 spring.cloud.sentinel.transport.port=8719
 spring.cloud.sentinel.eager=true
-spring.cloud.compatibility-verifier.enabled=false
 ```
 
-⚠️ 最後一行：Spring Cloud Alibaba 2023.0.1.2 官方只支援 Boot 3.2/3.3，disable verifier 先可以跑 Boot 3.5。Production 要升 Spring Cloud Alibaba 版本。
+⚠️ **版本選擇**：Spring Cloud Alibaba 版本號對應 Spring Cloud release train。**2025.0.0.0** 係目前唯一官方支援 Boot 3.5.x 既版本。如果用舊版（例如 2023.0.1.2，只支援 Boot 3.2/3.3），要加 `spring.cloud.compatibility-verifier.enabled=false` 先可以跑起。
 
 **啟動 Dashboard**（獨立 jar）：
 ```bash
@@ -346,6 +345,9 @@ Sentinel 預設 rules 存喺 **memory**，app restart 就清零。Dev 用 Dashbo
 | File (local) | 簡單 | dev |
 | **Nacos** | 阿里標配，配置中心 + push | 中大型 |
 | Apollo | 攜程出品 | 中大型 |
+| **Azure App Configuration** | 雲原生配置中心 | Azure 生態 |
+| **AWS AppConfig / Parameter Store** | 雲原生配置中心 | AWS 生態 |
+| **GCP Runtime Config** | 雲原生配置中心 | GCP 生態 |
 | ZooKeeper | legacy | - |
 | Redis | 簡單通用 | 中小型 |
 
@@ -355,9 +357,18 @@ Sentinel 預設 rules 存喺 **memory**，app restart 就清零。Dev 用 Dashbo
 
 Nacos 用 **long polling**（折衷），實時 + 簡單。
 
-### ⚠️ 唔好用 secret manager 儲 rules
+Sentinel 官方提供 `sentinel-datasource-*` adapter 系列，社群有 Azure/AWS 既實現。自己寫都唔難 — 實現 `ReadableDataSource<String, List<Rule>>` interface 就得。
 
-AWS Secrets Manager / Azure Key Vault 係儲 **密碼、API key**，唔係配置。Rules 屬於**可變配置**，應該用**配置中心**（Nacos / Apollo / Consul）。
+### ⚠️ Config Service vs Secret Service — 完全唔同嘢
+
+| | **Config Service** | **Secret Service** |
+|---|---|---|
+| **例子** | Azure App Configuration、AWS AppConfig、GCP Runtime Config、Nacos、Apollo | Azure Key Vault、AWS Secrets Manager、GCP Secret Manager |
+| **儲咩** | **可變配置**（feature flags、rules、endpoints） | **機密**（密碼、API key、certificate） |
+| **特點** | Dynamic refresh、push notification、versioning、rollback | 加密儲存、嚴格 access control、通常 read once at startup |
+| **用途** | Sentinel rules、business config | DB password、JWT secret、external API credentials |
+
+**Sentinel rules 應該用 Config Service，唔係 Secret Service**。兩者定位完全唔同，唔好混淆。
 
 ---
 
