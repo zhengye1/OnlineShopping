@@ -112,6 +112,12 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- Sentinel: Flow control, circuit breaking, system protection -->
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-sentinel</artifactId>
+            <version>2025.0.0.0</version>
+        </dependency>
     </dependencies>
 
     <build>

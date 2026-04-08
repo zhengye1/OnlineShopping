@@ -1,5 +1,7 @@
 package com.onlineshopping.controller;
 
+import com.alibaba.csp.sentinel.annotation.SentinelResource;
+import com.alibaba.csp.sentinel.slots.block.BlockException;
 import com.onlineshopping.document.ProductDocument;
 import com.onlineshopping.dto.PageResponse;
 import com.onlineshopping.dto.ProductRequest;
@@ -70,4 +72,25 @@ public class ProductController {
         return productSearchService.searchProducts(keyword);
     }
 
+    @GetMapping("/slow")
+    @SentinelResource(
+            value = "slowEndpoint",
+            blockHandler = "slowBlockHandler",
+            fallback = "slowFallback"
+    )
+    public String slowEndpoint() throws InterruptedException {
+        // 模擬 downstream 慢（例如 DB 變慢、外部 API timeout）
+        Thread.sleep(2000);
+        return "slow response";
+    }
+
+    // blockHandler：畀 Sentinel rule 攔截時 call（流控/熔斷）
+    public String slowBlockHandler(BlockException ex) {
+        return "【降級】服務繁忙中，請稍後再試 (blocked by: " + ex.getClass().getSimpleName() + ")";
+    }
+
+    // fallback：業務邏輯拋 exception 時 call（唔係 BlockException）
+    public String slowFallback(Throwable ex) {
+        return "【降級】服務暫時不可用 (error: " + ex.getMessage() + ")";
+    }
 }
