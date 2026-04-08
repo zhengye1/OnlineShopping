@@ -1,0 +1,45 @@
+mode:
+  type: Standalone
+  repository:
+    type: JDBC
+
+dataSources:
+  shard0:
+    dataSourceClassName: com.zaxxer.hikari.HikariDataSource
+    driverClassName: com.mysql.cj.jdbc.Driver
+    jdbcUrl: jdbc:mysql://localhost:3307/online_shopping_shard0?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+    username: root
+    password: root
+  shard1:
+    dataSourceClassName: com.zaxxer.hikari.HikariDataSource
+    driverClassName: com.mysql.cj.jdbc.Driver
+    jdbcUrl: jdbc:mysql://localhost:3308/online_shopping_shard1?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+    username: root
+    password: root
+
+rules:
+  - !SHARDING
+    tables:
+      orders:
+        actualDataNodes: shard${0..1}.orders
+        tableStrategy:
+          none:
+        databaseStrategy:
+          standard:
+            shardingColumn: user_id
+            shardingAlgorithmName: user_id_mod
+    defaultDatabaseStrategy:
+      none:
+    defaultTableStrategy:
+      none:
+    shardingAlgorithms:
+      user_id_mod:
+        type: INLINE
+        props:
+          algorithm-expression: shard$->{user_id % 2}
+  - !SINGLE
+    tables:
+      - "*.*.*"
+
+props:
+  sql-show: true
