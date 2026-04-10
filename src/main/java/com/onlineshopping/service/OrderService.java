@@ -167,7 +167,7 @@ public class OrderService {
 
     @Transactional
     public OrderResponse cancelOrder(Long orderId){
-        User user =getCurrentUser();
+        User user = getCurrentUser();
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found"));
         if (!user.getId().equals(order.getUser().getId())) throw new BadRequestException("The order didn't belong to you");
