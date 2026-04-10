@@ -267,7 +267,97 @@ Fire-and-forget 通知型？ → Choreography
 
 ---
 
-## 10. 🎤 Interview Cheat Sheet
+## 10. 🎤 Interview Drills（5 條面試題 + Model Answer）
+
+### Q1: 解釋 CAP 定理。你個系統係 CP 定 AP？
+
+**記憶口訣：「錢 CP，畫面 AP」**
+
+<details>
+<summary>Model Answer（點擊展開）</summary>
+
+> "CAP says a distributed system can only guarantee two of Consistency, Availability, and Partition Tolerance. Since network partitions are inevitable, the real choice is **CP vs AP**.
+>
+> Our system uses **both**: checkout (stock/payment) is **CP** — we'd rather return an error than oversell. Product browsing and search is **AP** — a slightly stale cache is fine for better user experience."
+
+</details>
+
+---
+
+### Q2: 2PC 同 Saga 嘅最大分別係咩？點解互聯網公司唔用 2PC？
+
+**記憶口訣：「2PC 鎖住等人，Saga 做住先錯咗再救」**
+
+<details>
+<summary>Model Answer（點擊展開）</summary>
+
+> "The biggest difference: **2PC holds database locks** across all participants until everyone commits — synchronous blocking. **Saga commits each step immediately** and uses compensating actions on failure — no distributed locks.
+>
+> Internet companies avoid 2PC because:
+> 1. **Synchronous blocking** kills throughput under high concurrency
+> 2. **Coordinator SPOF (Single Point of Failure)** — if it crashes, all participants freeze with locks held
+> 3. Despite paying this huge cost, it still **can't guarantee consistency** under network partitions"
+
+</details>
+
+---
+
+### Q3: 你個 checkout flow 跨了兩個 DB shard，@Transactional 失效。你會點處理？
+
+**記憶口訣：「每步配反向操作，失敗就倒帶」**
+
+<details>
+<summary>Model Answer（點擊展開）</summary>
+
+> "I'd use the **Saga pattern with Orchestration**. Break checkout into local transactions:
+>
+> 1. `deductStock()` → compensate: `restoreStock()`
+> 2. `createOrder()` → compensate: `cancelOrder()`
+> 3. `chargePayment()` → compensate: `refundPayment()`
+> 4. `clearCart()` → no compensation needed (user wants to retry payment, not re-select items)
+>
+> Each step commits independently. If step 3 fails, the orchestrator runs compensations in reverse order. All compensations must be **idempotent** to handle retries safely."
+
+</details>
+
+---
+
+### Q4: Saga 嘅補償操作一定要滿足咩條件？點解？
+
+**記憶口訣：「冪等 = 做一次同做十次結果一樣」**
+
+<details>
+<summary>Model Answer（點擊展開）</summary>
+
+> "Saga compensations must be **idempotent** — executing the same compensation multiple times produces the same result. This is because network failures may cause retries, and without idempotency you get data corruption (e.g., restoring stock twice = stock inflated).
+>
+> Implementation: use a unique `compensation_id`. Before executing, check if it's already been processed. If yes, return success without re-executing."
+
+</details>
+
+---
+
+### Q5: 用戶付款成功，但發貨系統 timeout 咗，你唔知佢到底收到冇。你會點做？
+
+**記憶口訣：「Timeout ≠ 失敗，retry + 冪等 + 對賬」**
+
+<details>
+<summary>Model Answer（點擊展開）</summary>
+
+> "I **cannot** assume failure just because of a timeout — the shipping service may have actually processed it. So:
+>
+> 1. **Don't compensate immediately** — timeout ≠ failure
+> 2. **Retry with idempotent request** — send the same shipping request with the same `request_id`. If shipping service already processed it, it returns success without re-shipping
+> 3. **If retries exhausted** → put into a **dead letter queue** for manual handling or automated reconciliation
+> 4. **Reconciliation job** as safety net — periodically scan orders in `PAID` status that have no corresponding shipping record after X minutes, and trigger re-shipping
+>
+> The key insight: in distributed systems, **timeout is the hardest case** — it's neither success nor failure. The safe response is **retry with idempotency**, never assume."
+
+</details>
+
+---
+
+### Quick Reference
 
 | 題目 | 一句話記憶 |
 |---|---|
