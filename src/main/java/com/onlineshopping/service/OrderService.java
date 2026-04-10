@@ -2,13 +2,17 @@ package com.onlineshopping.service;
 
 import com.onlineshopping.dto.*;
 import com.onlineshopping.enums.ProductStatus;
+import com.onlineshopping.enums.SagaStatus;
 import com.onlineshopping.exception.BadRequestException;
 import com.onlineshopping.exception.ResourceNotFoundException;
 import com.onlineshopping.model.*;
 import com.onlineshopping.repository.CartItemRepository;
 import com.onlineshopping.repository.OrderItemRepository;
 import com.onlineshopping.repository.OrderRepository;
+import com.onlineshopping.repository.SagaExecutionRepository;
 import com.onlineshopping.repository.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,21 +24,27 @@ import static com.onlineshopping.enums.OrderStatus.*;
 
 @Service
 public class OrderService {
+    private static final Logger log = LoggerFactory.getLogger(OrderService.class);
+
     private final UserRepository userRepository;
     private final CartItemRepository cartItemRepository;
     private final OrderRepository orderRepository;
     private final OrderMessageProducer orderMessageProducer;
     private final RedisService redisService;
+    private final SagaExecutionRepository sagaExecutionRepository;
+
     public OrderService(UserRepository userRepository,
                         CartItemRepository cartItemRepository,
                         OrderRepository orderRepository,
                         OrderMessageProducer orderMessageProducer,
-                        RedisService redisService){
+                        RedisService redisService,
+                        SagaExecutionRepository sagaExecutionRepository){
         this.userRepository = userRepository;
         this.cartItemRepository = cartItemRepository;
         this.orderRepository = orderRepository;
         this.orderMessageProducer = orderMessageProducer;
         this.redisService = redisService;
+        this.sagaExecutionRepository = sagaExecutionRepository;
     }
     public List<OrderResponse> getMyOrder(){
         User user = getCurrentUser();
@@ -66,58 +76,88 @@ public class OrderService {
 
     @Transactional
     public void doCheckout(CheckoutCommand command){
-        User user = userRepository.findById(command.getUserId())
-                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
-        // 1. 拎购物车所有items
-        List<CartItem> items = this.cartItemRepository.findByUserId(command.getUserId());
-        // 2. 验证购物车非空
-        if (items.isEmpty()) throw new BadRequestException("Cart is empty");
+        // === Saga 狀態追蹤 (為將來拆微服務做準備) ===
+        SagaExecution saga = new SagaExecution();
+        saga.setSagaType("CHECKOUT");
+        saga.setUserId(command.getUserId());
+        saga.setStatus(SagaStatus.STARTED);
+        sagaExecutionRepository.save(saga);
 
-        // 3. 创建Order
-        Order order = new Order();
-        order.setOrderItems(new ArrayList<>());  // 初始化list
-        // 4. Loop每个cart item:
-        //    - 验证product状态 (ON_SALE?)
-        //    - 验证库存 (stock >= quantity?)
-        //    - 创建OrderItem (snapshot当前价格)
-        //    - 扣库存 (product.stock -= quantity)
-        //    - 累加subtotal
-        long subtotal = 0L;
-        for (CartItem item: items){
-            Product product = item.getProduct();
-            if (!product.getStatus().equals(ProductStatus.ON_SALE)) throw new BadRequestException("Product is not on sale");
+        try {
+            User user = userRepository.findById(command.getUserId())
+                    .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
-            OrderItem orderItem = new OrderItem();
-            orderItem.setProduct(product);
-            orderItem.setProductName(product.getName());
-            String lockKey = "lock:product:" + product.getId();
-            boolean locked = redisService.tryLock(lockKey, 10);
-            if (!locked) throw new BadRequestException("System busy, please try again");
-            try {
-                // 扣库存逻辑
-                if (product.getStock() < item.getQuantity()) throw new BadRequestException("Not enough stock");
-                product.setStock(product.getStock() - item.getQuantity());
-            } finally {
-                redisService.unlock(lockKey);  // 一定要释放锁
+            // Step 1: 驗證購物車
+            SagaStepLog step1 = saga.addStep(1, "VALIDATE_CART");
+            List<CartItem> items = this.cartItemRepository.findByUserId(command.getUserId());
+            if (items.isEmpty()) throw new BadRequestException("Cart is empty");
+            step1.markCompleted();
+            log.info("Saga [{}] Step 1: VALIDATE_CART completed", saga.getId());
+
+            // Step 2: 扣庫存
+            SagaStepLog step2 = saga.addStep(2, "DEDUCT_STOCK");
+            Order order = new Order();
+            order.setOrderItems(new ArrayList<>());
+            long subtotal = 0L;
+            for (CartItem item : items) {
+                Product product = item.getProduct();
+                if (!product.getStatus().equals(ProductStatus.ON_SALE))
+                    throw new BadRequestException("Product is not on sale");
+
+                OrderItem orderItem = new OrderItem();
+                orderItem.setProduct(product);
+                orderItem.setProductName(product.getName());
+                String lockKey = "lock:product:" + product.getId();
+                boolean locked = redisService.tryLock(lockKey, 10);
+                if (!locked) throw new BadRequestException("System busy, please try again");
+                try {
+                    if (product.getStock() < item.getQuantity())
+                        throw new BadRequestException("Not enough stock");
+                    product.setStock(product.getStock() - item.getQuantity());
+                } finally {
+                    redisService.unlock(lockKey);
+                }
+                orderItem.setProductPrice(product.getPrice());
+                orderItem.setOrder(order);
+                orderItem.setQuantity(item.getQuantity());
+                subtotal += orderItem.getProductPrice() * item.getQuantity();
+                order.getOrderItems().add(orderItem);
             }
-            orderItem.setProductPrice(product.getPrice());
-            orderItem.setOrder(order);
-            orderItem.setQuantity(item.getQuantity());
-            subtotal += orderItem.getProductPrice() * item.getQuantity();
-            order.getOrderItems().add(orderItem);
+            step2.markCompleted();
+            log.info("Saga [{}] Step 2: DEDUCT_STOCK completed", saga.getId());
+
+            // Step 3: 創建訂單
+            SagaStepLog step3 = saga.addStep(3, "CREATE_ORDER");
+            order.setUser(user);
+            order.setShippingAddress(command.getRequest().getShippingAddress());
+            order.setOrderStatus(PENDING_PAYMENT);
+            order.setTotalPrice(subtotal);
+            this.orderRepository.save(order);
+            saga.setOrderId(order.getId());
+            step3.markCompleted();
+            log.info("Saga [{}] Step 3: CREATE_ORDER completed, orderId={}", saga.getId(), order.getId());
+
+            // Step 4: 清空購物車
+            SagaStepLog step4 = saga.addStep(4, "CLEAR_CART");
+            this.cartItemRepository.deleteByUserId(user.getId());
+            step4.markCompleted();
+            log.info("Saga [{}] Step 4: CLEAR_CART completed", saga.getId());
+
+            // Saga 完成
+            saga.setStatus(SagaStatus.COMPLETED);
+            saga.setCompletedAt(java.time.LocalDateTime.now());
+            sagaExecutionRepository.save(saga);
+            log.info("Saga [{}] CHECKOUT completed successfully, orderId={}", saga.getId(), order.getId());
+
+        } catch (Exception e) {
+            // Saga 失敗 — 記錄狀態
+            // 注: 因為仲係 monolith + @Transactional，DB 會自動 rollback
+            // 將來拆服務後，呢度會改成手動執行補償
+            saga.setStatus(SagaStatus.FAILED);
+            sagaExecutionRepository.save(saga);
+            log.error("Saga [{}] CHECKOUT failed: {}", saga.getId(), e.getMessage());
+            throw e; // 重新 throw，觸發 @Transactional rollback
         }
-        // 5. Set order的totalPrice, tax等
-        order.setUser(user);
-        order.setShippingAddress(command.getRequest().getShippingAddress());
-        order.setOrderStatus(PENDING_PAYMENT);
-        order.setTotalPrice(subtotal);
-
-        // 6. Save order
-        this.orderRepository.save(order);
-
-        // 7. 清空购物车
-        this.cartItemRepository.deleteByUserId(user.getId());
-        // 8. Done
     }
 
 
