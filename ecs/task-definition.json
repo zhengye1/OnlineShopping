@@ -1,0 +1,39 @@
+{
+  "family": "online-shopping",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "containerDefinitions": [
+    {
+      "name": "OnlineShopping",
+      "image": "123456789.dkr.ecr.us-east-1.amazonaws.com/online-shopping:latest",
+      "portMappings": [
+        {
+          "containerPort": 8080,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        { "name": "SPRING_DATASOURCE_URL", "value": "jdbc:mysql://rds-endpoint:3306/online_shopping" },
+        { "name": "SPRING_DATASOURCE_USERNAME", "value": "root" },
+        { "name": "SPRING_DATA_REDIS_HOST", "value": "elasticache-endpoint" },
+        { "name": "ROCKETMQ_NAME_SERVER", "value": "rocketmq-endpoint:9876" }
+      ],
+      "secrets": [
+        {
+          "name": "SPRING_DATASOURCE_PASSWORD",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:123456789:secret:db-password"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/online-shopping",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}
