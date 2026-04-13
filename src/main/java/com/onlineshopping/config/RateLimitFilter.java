@@ -18,7 +18,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
         this.redisService = redisService;
     }
     @Override
-    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
+            throws ServletException, IOException {
         String ip = request.getRemoteAddr();
         boolean isLimited = redisService.isRateLimited("rate:"+ip, 30, 60);
         if (isLimited) {

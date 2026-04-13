@@ -12,6 +12,8 @@ import com.onlineshopping.repository.CartItemRepository;
 import com.onlineshopping.repository.OrderRepository;
 import com.onlineshopping.repository.SagaExecutionRepository;
 import com.onlineshopping.repository.UserRepository;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -28,6 +30,7 @@ import static com.onlineshopping.enums.OrderStatus.CANCELLED;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -49,6 +52,12 @@ public class OrderServiceTest {
 
     @Mock
     SagaExecutionRepository sagaExecutionRepository;
+
+    @Mock
+    MeterRegistry meterRegistry;
+
+    @Mock
+    Counter counter;
 
     @Mock
     SecurityContext securityContext;
@@ -82,6 +91,7 @@ public class OrderServiceTest {
         mockOrder.setOrderItems(List.of(mockOrderItem));
         when(orderRepository.findById(anyLong())).thenReturn(Optional.of(mockOrder));
         when(orderRepository.save(any(Order.class))).thenReturn(mockOrder);
+        when(meterRegistry.counter(anyString())).thenReturn(counter);
         OrderResponse response = orderService.cancelOrder(1L);
         assertEquals(CANCELLED.name(), response.getOrderStatus());
         assertEquals(100, mockProduct.getStock());
