@@ -11,6 +11,7 @@ import com.onlineshopping.repository.OrderItemRepository;
 import com.onlineshopping.repository.OrderRepository;
 import com.onlineshopping.repository.SagaExecutionRepository;
 import com.onlineshopping.repository.UserRepository;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -32,19 +33,22 @@ public class OrderService {
     private final OrderMessageProducer orderMessageProducer;
     private final RedisService redisService;
     private final SagaExecutionRepository sagaExecutionRepository;
+    private final MeterRegistry meterRegistry;
 
     public OrderService(UserRepository userRepository,
                         CartItemRepository cartItemRepository,
                         OrderRepository orderRepository,
                         OrderMessageProducer orderMessageProducer,
                         RedisService redisService,
-                        SagaExecutionRepository sagaExecutionRepository){
+                        SagaExecutionRepository sagaExecutionRepository,
+                        MeterRegistry meterRegistry){
         this.userRepository = userRepository;
         this.cartItemRepository = cartItemRepository;
         this.orderRepository = orderRepository;
         this.orderMessageProducer = orderMessageProducer;
         this.redisService = redisService;
         this.sagaExecutionRepository = sagaExecutionRepository;
+        this.meterRegistry = meterRegistry;
     }
     public List<OrderResponse> getMyOrder(){
         User user = getCurrentUser();
@@ -148,7 +152,7 @@ public class OrderService {
             saga.setCompletedAt(java.time.LocalDateTime.now());
             sagaExecutionRepository.save(saga);
             log.info("Saga [{}] CHECKOUT completed successfully, orderId={}", saga.getId(), order.getId());
-
+            meterRegistry.counter("orders.checkout.count").increment();
         } catch (Exception e) {
             // Saga 失敗 — 記錄狀態
             // 注: 因為仲係 monolith + @Transactional，DB 會自動 rollback
@@ -178,6 +182,7 @@ public class OrderService {
         }
         order.setOrderStatus(CANCELLED);
         orderRepository.save(order);
+        meterRegistry.counter("orders.cancel.count").increment();
         return toOrderResponse(order);
     }
 
