@@ -192,7 +192,7 @@ SagaExecution + SagaStepLog = **Audit trail**，唔係自動 rollback engine。P
 
 ---
 
-## 面試模擬練習（5 Rounds）
+## 面試模擬練習（8 Rounds）
 
 ### Round 1: Tech Stack Justification
 
@@ -249,6 +249,80 @@ SagaExecution + SagaStepLog = **Audit trail**，唔係自動 rollback engine。P
 **Q: What happens if RocketMQ goes down during checkout? Or Redis is unavailable?**
 
 > We handle failures at multiple levels. For checkout, we use RocketMQ's **transaction message** — if the local transaction fails, the message is rolled back and never delivered. If the app crashes mid-transaction, RocketMQ calls `checkLocalTransaction()` to verify the DB state and decides COMMIT or ROLLBACK automatically. For order cancellation, we apply the **Saga pattern** with compensating transactions — restore stock, update status. We maintain **saga logs** as an audit trail for debugging partial failures. If Redis goes down, we degrade gracefully — cache misses fall through to MySQL, and lock failures cause retries rather than silent data corruption. The keyword is **graceful degradation**.
+
+### Round 6: Database Design
+
+**Q: Walk me through your database schema. How did you design the relationships?**
+
+> We have 5 core entities. **User** has username, password (BCrypt hashed), email, role, is_active. **Category** has name and a self-referencing `parent_id` for hierarchical categories (e.g., Electronics → Phones). **Product** belongs to a Category and a User (seller), with name, description, price, stock, image URL, status.
+>
+> **Order** and **OrderItem** are separated because an order can contain multiple products — this is a **One-to-Many** relationship. Putting items directly in the Order table would violate **First Normal Form** (variable number of columns). More importantly, OrderItem serves as a **join table** for the Many-to-Many relationship between Product and Order, while carrying extra attributes: quantity and **snapshot price**.
+>
+> Product and Order have no direct foreign key — OrderItem bridges them. This decouples order history from product lifecycle. If a product is deleted or price changes, existing orders remain intact with their original snapshot data.
+
+**ER Relationships:**
+```
+User ──1:N──> Product      (seller lists products)
+User ──1:N──> Order        (buyer places orders)
+Category ──1:N──> Product   (category contains products)
+Category ──1:N──> Category  (self-ref: parent-child hierarchy)
+Order ──1:N──> OrderItem    (order contains items)
+Product ──1:N──> OrderItem  (product appears in items)
+Order ──1:N──> Payment      (multiple payment attempts allowed)
+```
+
+### Round 7: Monitoring & Debugging
+
+**Q: It's 3 AM. Users report 500 errors on checkout. How do you debug this?**
+
+> First, I'd **scope the problem** — check `/actuator/health` to see if any dependency is down, and check our custom metrics (`orders.checkout.count`) to understand the failure rate and when it started.
+>
+> Then I'd go to **CloudWatch logs**, filter by `[ERROR]`, and use the **MDC requestId** to trace the full request flow of a failing checkout. The stack trace from our `GlobalExceptionHandler` — which we made sure always logs exceptions — would point me to the root cause.
+>
+> Common suspects: database connection timeout, Redis unavailability, or RocketMQ broker issues. The health check endpoint tells me which component is down immediately.
+>
+> After fixing, I'd verify: error rate drops, `orders.checkout.count` resumes incrementing, `/actuator/health` returns all UP.
+
+**Structured Debugging Framework:**
+```
+Step 1: Scope     → /actuator/health + metrics → 全掛 or 偶發？
+Step 2: Find      → CloudWatch [ERROR] + reqId → stack trace
+Step 3: Identify  → Stack trace 指向邊個 component？
+Step 4: Check     → /actuator/health → db/redis/es UP or DOWN？
+Step 5: Fix       → 修復 + verify error rate + health
+```
+
+### Round 8: Deployment & CI/CD
+
+**Q: How do you deploy your application? How do you achieve zero-downtime deployment?**
+
+> Our CI/CD has two stages. **CI** runs on every PR via GitHub Actions — checks out code, sets up Java 21 with Maven cache, runs unit tests with H2 in-memory database (no external dependencies needed), and reports status on the PR. After code review and merge, **CD** is manually triggered via `workflow_dispatch` — this gives us a safety gate before production rollout.
+>
+> The deploy workflow: configure AWS credentials → login to ECR → build a **multi-stage Docker image** (Maven build stage + slim JRE runtime stage, ~200MB vs ~800MB) → tag with **git SHA** for traceability → push to ECR → update ECS service.
+>
+> ECS performs a **rolling update** for zero-downtime: new tasks start alongside old ones, ALB health checks verify them via `/actuator/health`, and only when new tasks are healthy does it drain traffic from old tasks and terminate them. At no point are there zero healthy tasks serving traffic.
+
+**CI/CD Pipeline:**
+```
+PR created → ci.yml: checkout → Java 21 → mvn test (H2) → ✅/❌ status
+Code review → merge to main
+Manual trigger → deploy.yml:
+  1. Configure AWS credentials
+  2. Login ECR
+  3. Docker multi-stage build
+  4. Tag with git SHA
+  5. Push to ECR
+  6. Update ECS → Rolling update → Zero downtime
+```
+
+**Zero-Downtime Rolling Update:**
+```
+1. ECS starts NEW tasks (new image)
+2. ALB health check: GET /actuator/health → 200?
+3. New tasks healthy → ALB routes traffic to new tasks
+4. Old tasks: drain connections → terminate
+→ At no point are there zero healthy tasks
+```
 
 ---
 
