@@ -192,6 +192,66 @@ SagaExecution + SagaStepLog = **Audit trail**，唔係自動 rollback engine。P
 
 ---
 
+## 面試模擬練習（5 Rounds）
+
+### Round 1: Tech Stack Justification
+
+**Q: Why did you choose this tech stack? Walk me through your key technology decisions and the trade-offs.**
+
+> We built this on **Spring Boot** for its auto-configuration and mature ecosystem — it significantly reduces boilerplate compared to plain Spring. For the database, we chose **MySQL** because e-commerce data is inherently relational — users place orders, orders contain items, items reference products — and we need **ACID transactions** for financial operations. **When money is involved, we need strong consistency (CP).**
+>
+> **Redis** serves three purposes: caching (product detail 30min TTL), distributed locks (checkout stock deduction), and rate limiting (30 req/60s per IP). We chose **RocketMQ** over Kafka because RocketMQ natively supports **transaction messages** — HALF message → local transaction → COMMIT/ROLLBACK — which guarantees consistency between DB operations and message delivery without implementing the Outbox pattern manually. **ElasticSearch** handles full-text product search with inverted index and relevance scoring, which MySQL LIKE queries can't provide at scale.
+
+### Round 2: Checkout Flow
+
+**Q: When a user clicks 'checkout', what happens end-to-end?**
+
+> 1. Client sends `POST /api/orders/checkout` with JWT Bearer token
+> 2. Controller calls `OrderService.checkout()`, which sends a **HALF message** to RocketMQ
+> 3. `TransactionListener.executeLocalTransaction()` runs `doCheckout()`:
+>    - Validate user is active
+>    - Load cart items
+>    - For each item: acquire **Redis distributed lock** (per product ID) → check stock ≥ quantity → deduct stock in MySQL → release lock
+>    - **Snapshot** current price into OrderItem (not a reference — seller changing price later won't affect this order)
+>    - Calculate total + HST 13%
+>    - Create Order with `PENDING_PAYMENT` status
+>    - Clear cart
+> 4. Local TX succeeds → return **COMMIT** → message delivered to consumer
+> 5. Controller returns **202 Accepted** (not 201, because the order is created asynchronously)
+> 6. Frontend polls order status periodically
+
+### Round 3: Caching Strategy
+
+**Q: How do you keep the cache consistent with the database? What happens when a seller updates a product's price — does the buyer see stale data?**
+
+> We use **Cache-Aside pattern**. On read, check cache first; on miss, load from DB and populate cache with 30-min TTL. On write (update/delete), we **invalidate the cache** immediately. So stale data only exists in a very small race condition window. And even if stale data is served during browsing, **checkout always reads from the database** for price snapshot, so financial accuracy is guaranteed.
+>
+> We **delete** rather than update the cache because concurrent writes can cause ordering issues — a slower update could overwrite a newer value, leaving the cache permanently inconsistent. Deletion is **idempotent** and guarantees the next read fetches the latest value from the database.
+
+### Round 4: Security
+
+**Q: How does your system handle authentication and authorization?**
+
+> We use **JWT** for stateless authentication. On login, the server validates credentials with **BCrypt** hash comparison and issues a JWT containing username, role, and expiry. Every subsequent request carries the token in the `Authorization: Bearer` header. A `JwtAuthenticationFilter` extracts and validates the token, then sets the `SecurityContext`. Because JWT is stateless, the server doesn't store sessions — any instance can validate the request, making it **horizontally scalable**.
+>
+> For authorization, we use **Role-Based Access Control** — ADMIN-only for destructive operations like product deletion, authenticated for cart/order operations, and permitAll for public endpoints (browse products, register, health check, payment callback).
+
+**Q: What if a JWT token is stolen?**
+
+> Pure JWT can't do instant invalidation — that's the trade-off of statelessness. The production approach is **short-lived access tokens (15-30 min)** paired with **refresh tokens (7-14 days)**. If compromised, revoke the refresh token and the damage window is limited to the access token's remaining TTL. For immediate revocation, maintain a **token blacklist in Redis** — partially breaks statelessness but is an acceptable trade-off.
+
+### Round 5: Scalability & Failure Handling
+
+**Q: How would you scale this system? What's the first bottleneck?**
+
+> The first bottleneck would be the **database** — reads and writes both hit it. Our scaling strategy works in layers: **Rate limiting** at the entry point rejects abusive traffic. **Redis caching** absorbs most read traffic. For writes, we **shard the orders table by user_id**, distributing write pressure across multiple database instances. The application layer is **stateless** thanks to JWT, so we can horizontally scale by adding instances behind a load balancer. And **circuit breaking** with Sentinel prevents any slow dependency from cascading into a full system outage.
+
+**Q: What happens if RocketMQ goes down during checkout? Or Redis is unavailable?**
+
+> We handle failures at multiple levels. For checkout, we use RocketMQ's **transaction message** — if the local transaction fails, the message is rolled back and never delivered. If the app crashes mid-transaction, RocketMQ calls `checkLocalTransaction()` to verify the DB state and decides COMMIT or ROLLBACK automatically. For order cancellation, we apply the **Saga pattern** with compensating transactions — restore stock, update status. We maintain **saga logs** as an audit trail for debugging partial failures. If Redis goes down, we degrade gracefully — cache misses fall through to MySQL, and lock failures cause retries rather than silent data corruption. The keyword is **graceful degradation**.
+
+---
+
 ## Interview Quick-Fire
 
 <details>
