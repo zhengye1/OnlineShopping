@@ -1,6 +1,7 @@
 package com.onlineshopping.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.onlineshopping.dto.FrontendErrorRequest;
 import com.onlineshopping.dto.WebVitalsRequest;
 import com.onlineshopping.repository.es.ProductSearchRepository;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -66,6 +67,39 @@ class MetricsControllerTest {
         mockMvc.perform(post("/api/metrics/vitals")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void postErrors_increments_counter_and_returns_204() throws Exception {
+        FrontendErrorRequest err = new FrontendErrorRequest();
+        err.setMessage("TypeError: cannot read property foo of undefined");
+        err.setStack("at ProductCard (ProductCard.tsx:42)");
+        err.setUrl("https://shop.example.com/products/1");
+        err.setUserAgent("Mozilla/5.0 ...");
+        err.setSeverity("error");
+
+        mockMvc.perform(post("/api/metrics/errors")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(err)))
+                .andExpect(status().isNoContent());
+
+        assertThat(meterRegistry.get("frontend.errors")
+                .tag("severity", "error")
+                .counter()
+                .count()).isEqualTo(1.0);
+    }
+
+    @Test
+    void postErrors_with_missing_message_returns_400() throws Exception {
+        FrontendErrorRequest err = new FrontendErrorRequest();
+        err.setUrl("https://shop.example.com/");
+        err.setUserAgent("Mozilla/5.0");
+        err.setSeverity("error");
+
+        mockMvc.perform(post("/api/metrics/errors")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(err)))
                 .andExpect(status().isBadRequest());
     }
 }
