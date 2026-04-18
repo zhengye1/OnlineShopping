@@ -48,6 +48,7 @@ public class SecurityConfig {
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/products/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/feed").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/metrics/**").permitAll()
 
                         // Admin only
                         .requestMatchers(HttpMethod.DELETE, "/api/products/**").hasRole("ADMIN")
