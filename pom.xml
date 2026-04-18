@@ -133,6 +133,13 @@
             <scope>test</scope>
         </dependency>
 
+        <!-- Spring Security Test: @WithAnonymousUser, SecurityMockMvc -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
         <!-- Sentinel: Flow control, circuit breaking, system protection -->
         <dependency>
             <groupId>com.alibaba.cloud</groupId>
