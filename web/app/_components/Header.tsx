@@ -1,4 +1,5 @@
 import Link from "next/link";
+import AuthButton from "./AuthButton";
 
 // Server component（冇 'use client'）。純靜態導航，零 JS 落 browser。
 // Lesson 28 再加 client cart badge 拎真正 count。
@@ -31,12 +32,7 @@ export default function Header() {
               0
             </span>
           </Link>
-          <Link
-            href="/login"
-            className="text-sm px-3 py-1.5 rounded-md border border-gray-300 hover:border-blue-600 hover:text-blue-600"
-          >
-            Sign in
-          </Link>
+          <AuthButton />
         </div>
       </div>
     </header>
