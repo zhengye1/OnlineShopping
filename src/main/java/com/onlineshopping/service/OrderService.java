@@ -14,9 +14,12 @@ import com.onlineshopping.repository.UserRepository;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -34,6 +37,7 @@ public class OrderService {
     private final RedisService redisService;
     private final SagaExecutionRepository sagaExecutionRepository;
     private final MeterRegistry meterRegistry;
+    private final RedisTemplate<String, Object> redisTemplate;
 
     public OrderService(UserRepository userRepository,
                         CartItemRepository cartItemRepository,
@@ -41,7 +45,8 @@ public class OrderService {
                         OrderMessageProducer orderMessageProducer,
                         RedisService redisService,
                         SagaExecutionRepository sagaExecutionRepository,
-                        MeterRegistry meterRegistry){
+                        MeterRegistry meterRegistry,
+                        RedisTemplate<String, Object> redisTemplate){
         this.userRepository = userRepository;
         this.cartItemRepository = cartItemRepository;
         this.orderRepository = orderRepository;
@@ -49,6 +54,7 @@ public class OrderService {
         this.redisService = redisService;
         this.sagaExecutionRepository = sagaExecutionRepository;
         this.meterRegistry = meterRegistry;
+        this.redisTemplate = redisTemplate;
     }
     public List<OrderResponse> getMyOrder(){
         User user = getCurrentUser();
@@ -129,6 +135,11 @@ public class OrderService {
             }
             step2.markCompleted();
             log.info("Saga [{}] Step 2: DEDUCT_STOCK completed", saga.getId());
+            // OrderService.checkout，deduct stock 之後
+            List<Long> productIds = order.getOrderItems().stream()
+                    .map(item -> item.getProduct().getId())
+                    .toList();
+            evictProductCacheAfterCommit(productIds);
 
             // Step 3: 創建訂單
             SagaStepLog step3 = saga.addStep(3, "CREATE_ORDER");
@@ -183,9 +194,34 @@ public class OrderService {
         order.setOrderStatus(CANCELLED);
         orderRepository.save(order);
         meterRegistry.counter("orders.cancel.count").increment();
+        List<Long> productIds = items.stream()
+                .map(item -> item.getProduct().getId())
+                .toList();
+        evictProductCacheAfterCommit(productIds);
         return toOrderResponse(order);
     }
 
+    private void evictProductCacheAfterCommit(List<Long> productIds) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(
+                    new TransactionSynchronization() {
+                        @Override
+                        public void afterCommit() {
+                            doEvictProductCache(productIds);
+                        }
+                    }
+            );
+        } else {
+            doEvictProductCache(productIds);
+        }
+    }
+
+    private void doEvictProductCache(List<Long> productIds) {
+        for (Long id : productIds) {
+            redisTemplate.delete("product:" + id);
+        }
+        redisTemplate.delete("product:list");
+    }
     private User getCurrentUser() {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
         return userRepository.findByUsername(username)
