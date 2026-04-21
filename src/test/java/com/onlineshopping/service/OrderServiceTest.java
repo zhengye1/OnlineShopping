@@ -19,6 +19,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -58,6 +59,9 @@ public class OrderServiceTest {
 
     @Mock
     Counter counter;
+
+    @Mock
+    RedisTemplate<String, Object> redisTemplate;
 
     @Mock
     SecurityContext securityContext;
