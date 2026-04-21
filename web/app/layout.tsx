@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import Header from "./_components/Header";                       // ⑫ 由 _components 私有資料夾 import
+// ⑫ 由 _components 私有資料夾 import
+import Header from "./_components/Header";
+import Footer from "./_components/Footer";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -31,6 +33,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         <Header />                                               {/* ⑩ 每個 page 之前自動渲染 */}
         <main className="flex-1">{children}</main>               {/* ⑩ page 內容由 children slot 塞入 */}
+        <Footer />
       </body>
     </html>
   );
