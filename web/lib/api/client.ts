@@ -19,3 +19,8 @@ async function apiGet<T>(path: string): Promise<T> {
 export function getFeed(): Promise<FeedResponse> {
   return apiGet<FeedResponse>("/api/feed");
 }
+
+type ProductResponse = components["schemas"]["ProductResponse"];
+export function getProduct(id: number): Promise<ProductResponse>{
+  return apiGet<ProductResponse>(`/api/products/${id}`);
+}
