@@ -1,6 +1,7 @@
-"use client";                                                  // ⑥ 呢個 file 係 client component
+"use client";// ⑥ 呢個 file 係 client component
 
-import { useState } from "react";                              // ⑦ React hook
+import { useState } from "react";
+import {addToCart} from "@/lib/cart/actions"; // ⑦ React hook
 
 type Props = {
   productId: number;
@@ -15,9 +16,8 @@ export default function AddToCartButton({ productId, stock }: Props) {
   const canDecrease = quantity > 1;
   const canIncrease = quantity < stock;
 
-  function handleAdd() {
-    // Lesson 28 會 call POST /api/cart；今堂只做 UI skeleton
-    console.log(`[skeleton] add product ${productId} × ${quantity}`);
+  async function handleAdd() {
+    await addToCart(productId, quantity);
     setAdded(true);
     setTimeout(() => setAdded(false), 1500);
   }
