@@ -1,6 +1,7 @@
 import {getCart} from "@/lib/cart/store";
 import Link from "next/link";
 import {getProduct} from "@/lib/api/client";
+import {removeFromCart} from "@/lib/cart/actions";
 
 export const dynamic = "force-dynamic"
 
@@ -32,7 +33,6 @@ export default async function CartPage() {
     return (
         <main className="mx-auto max-w-6xl px-6 py-12">
             <h1 className="text-3xl font-semibold mb-8">Your Cart</h1>
-            {/* TODO: items list */}
             <ul className="space-y-4 mb-8">
                 {items.map((item, idx) => {
                     const product = products[idx];
@@ -50,11 +50,18 @@ export default async function CartPage() {
                             <p className="font-semibold text-gray-900">
                                 ${(lineTotal / 100).toFixed(2)}
                             </p>
+                            {/* Remove button */}
+                            <form action={removeFromCart.bind(null, item.productId)}>
+                                <button
+                                    type="submit"
+                                    className="text-sm text-red-600 hover:text-red-800 hover:underline">
+                                    Remove
+                                </button>
+                            </form>
                         </li>
                     )
                 })}
             </ul>
-            {/* TODO: subtotal row */}
             <div className="pt-6 border-t border-gray-200 flex justify-between items-center">
                 <span className="text-lg font-semibold text-gray-900">Subtotal</span>
                 <span className="text-2xl font-bold text-blue-600">

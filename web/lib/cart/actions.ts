@@ -37,3 +37,20 @@ export async function addToCart(productId: number, quantity: number){
     // Tell Next: /cart page's cache HTML is stale, re-render next request
     revalidatePath("/cart");
 }
+export async function removeFromCart(productId: number) {
+    const store = await cookies();
+    const raw = store.get(CART_COOKIE)?.value;
+    if (!raw) return; // no cookies then nothing to do
+    let cart: Cart;
+    try {
+        cart = JSON.parse(raw);
+    } catch {
+        return; // corrupt cookies
+    }
+    cart.items = cart.items.filter(item => item.productId !== productId);
+    store.set(CART_COOKIE, JSON.stringify(cart), {
+        path: "/",
+        maxAge: COOKIE_MAX_AGE
+    });
+    revalidatePath("/cart");
+}
