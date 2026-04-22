@@ -82,3 +82,9 @@ export async function updateQuantity(productId: number, formData: FormData){
 
     revalidatePath("/cart");
 }
+
+export async function clearCart(){
+    const store = await cookies();
+    store.delete(CART_COOKIE);
+    revalidatePath("/cart");
+}

@@ -1,7 +1,7 @@
 import {getCart} from "@/lib/cart/store";
 import Link from "next/link";
 import {getProduct} from "@/lib/api/client";
-import {removeFromCart, updateQuantity} from "@/lib/cart/actions";
+import {clearCart, removeFromCart, updateQuantity} from "@/lib/cart/actions";
 
 export const dynamic = "force-dynamic"
 
@@ -81,6 +81,13 @@ export default async function CartPage() {
                     ${(subtotal / 100).toFixed(2)}
                 </span>
             </div>
+            <form action={clearCart} className="mt-4 flex justify-end">
+                <button
+                    type="submit"
+                    className="text-sm text-red-600 hover:text-red-800 hover:underline">
+                    Clear Cart
+                </button>
+            </form>
         </main>
     );
 }
