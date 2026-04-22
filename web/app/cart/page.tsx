@@ -1,7 +1,7 @@
 import {getCart} from "@/lib/cart/store";
 import Link from "next/link";
 import {getProduct} from "@/lib/api/client";
-import {removeFromCart} from "@/lib/cart/actions";
+import {removeFromCart, updateQuantity} from "@/lib/cart/actions";
 
 export const dynamic = "force-dynamic"
 
@@ -43,9 +43,22 @@ export default async function CartPage() {
                             className="flex gap-4 p-4 border border-gray-200 rounded-lg">
                             <div className="flex-1">
                                 <h3 className="font-medium text-gray-900">{product.name}</h3>
-                                <p className="text-sm text-gray-500 mt-1">
-                                    Qty: {item.quantity}
-                                </p>
+                                <form
+                                    action={updateQuantity.bind(null, item.productId)}
+                                    className="flex items-center gap-2 mt-1">
+                                    <label className="text-sm text-gray-500">Qty:</label>
+                                    <input
+                                        name="quantity"
+                                        type="number"
+                                        defaultValue={item.quantity}
+                                        min="0"
+                                        className="w-16 px-2 py-1 border border-gray-300 rounded text-sm" />
+                                    <button
+                                        type="submit"
+                                        className="text-sm text-blue-600 hover:text-blue-800 hover:underline">
+                                        Update
+                                    </button>
+                                </form>
                             </div>
                             <p className="font-semibold text-gray-900">
                                 ${(lineTotal / 100).toFixed(2)}
