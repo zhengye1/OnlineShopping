@@ -1,9 +1,11 @@
 import Link from "next/link";
 import AuthButton from "./AuthButton";
+import {getCart} from "@/lib/cart/store";
 
 // Server component（冇 'use client'）。純靜態導航，零 JS 落 browser。
-// Lesson 28 再加 client cart badge 拎真正 count。
-export default function Header() {
+export default async function Header() {
+  const cart = await getCart();
+  const count = cart.items.reduce((sum, i) => sum + i.quantity, 0);
   return (
     <header className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-gray-200">
       <div className="mx-auto max-w-6xl px-6 h-14 flex items-center justify-between">
@@ -27,10 +29,9 @@ export default function Header() {
             aria-label="Cart"
           >
             🛒
-            {/* L28 stub：hardcode 0，之後接真 count */}
-            <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-blue-600 text-white text-[10px] font-medium flex items-center justify-center">
-              0
-            </span>
+            {count > 0 &&( <span className="absolute -top-0.5 -right-0.5 min-w-4.5 h-4.5 px-1 rounded-full bg-blue-600 text-white text-[10px] font-medium flex items-center justify-center">
+              {count}
+            </span>)}
           </Link>
           <AuthButton />
         </div>
