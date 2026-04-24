@@ -2,6 +2,8 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import type {components} from "@/lib/api/types";
+import type {Cart} from "@/lib/cart/types";
+import {migrateCart} from "@/lib/cart/migrate";
 
 type AuthResponse = components["schemas"]["AuthResponse"];
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
@@ -31,6 +33,8 @@ export async function login(formData: FormData){
 
     const data = (await res.json()) as AuthResponse;
     await setAuthCookie(data.token!);
+    // migrate guest cart
+    await migrateGuestCartIfAny(data.token!);
     const safeNext = next.startsWith("/") &&
         !next.startsWith("//") ? next : "/"
      redirect(safeNext);
@@ -77,6 +81,7 @@ export async function register(formData: FormData){
 
     const data = (await res.json()) as AuthResponse;
     await setAuthCookie(data.token!);
+    await migrateGuestCartIfAny(data.token!);
     const safeNext = next.startsWith("/") &&
         !next.startsWith("//") ? next : "/"
     redirect(safeNext);
@@ -91,4 +96,15 @@ async function setAuthCookie(token: string){
         sameSite: "lax",
         secure: process.env.NODE_ENV === "production",
     });
+}
+
+async function migrateGuestCartIfAny(token: string) {
+    const store = await cookies();
+    const rawCart = store.get("cart")?.value;
+    if (!rawCart) return;
+    try {
+        const guestCart: Cart = JSON.parse(rawCart);
+        await migrateCart(token, guestCart);
+        store.delete("cart");
+    } catch { /* skip corrupt */ }
 }
