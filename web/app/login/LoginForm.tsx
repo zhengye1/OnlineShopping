@@ -2,6 +2,7 @@
 
 import {useActionState} from "react";
 import {login} from "@/lib/auth/actions";
+import Link from "next/link";
 
 export default function LoginForm() {
     const [state, formAction, pending] = useActionState(
@@ -38,6 +39,10 @@ export default function LoginForm() {
                 className="w-full py-2 rounded bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:bg-gray-300">
                 {pending ? "Signing in..." : "Sign in"}
             </button>
+            <p className="text-sm text-gray-600">
+                No account?{" "}
+                <Link href="/register" className="text-blue-600 hover:underline">Sign up</Link>
+            </p>
         </form>
     );
 }

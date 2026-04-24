@@ -28,14 +28,7 @@ export async function login(formData: FormData){
     }
 
     const data = (await res.json()) as AuthResponse;
-    const store = await cookies();
-    store.set(AUTH_COOKIE, data.token!, {
-        path: "/",
-        maxAge: COOKIE_MAX_AGE,
-        httpOnly: true,
-        sameSite: "lax", //csrf
-        secure: process.env.NODE_ENV === "production",
-    });
+    await setAuthCookie(data.token!);
      redirect("/");
 }
 
@@ -43,4 +36,52 @@ export async function logout(){
     const store = await cookies();
     store.delete("auth_token");
     redirect("/");
+}
+
+export async function register(formData: FormData){
+    const username = String(formData.get("username") ?? "").trim();
+    const email = String(formData.get("email") ?? "").trim();
+    const password = String(formData.get("password") ?? "");
+
+    if (!username || !email || !password){
+        return {error: "All fields required"};
+    }
+
+    if (password.length < 8){
+        return {error: "Password must be at least 8 characters"};
+    }
+
+    const res = await fetch(`${API_BASE_URL}/api/auth/register`, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({username, email, password}),
+        cache: "no-store",
+    });
+
+    if (!res.ok){
+        // Try to extract backend validation message
+        let message = "Registration failed";
+        try {
+            const body = await res.json();
+            if (typeof body?.message === "string") message = body.message;
+        }catch {
+            /* ignore parse error */
+        }
+        return {error: message};
+    }
+
+    const data = (await res.json()) as AuthResponse;
+    await setAuthCookie(data.token!);
+    redirect("/");
+}
+
+async function setAuthCookie(token: string){
+    const store = await cookies();
+    store.set(AUTH_COOKIE, token, {
+        path:"/",
+        maxAge:COOKIE_MAX_AGE,
+        httpOnly: true,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+    });
 }
