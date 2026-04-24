@@ -1,7 +1,7 @@
 "use server"
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import {components} from "@/lib/api/types";
+import type {components} from "@/lib/api/types";
 
 type AuthResponse = components["schemas"]["AuthResponse"];
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
@@ -37,4 +37,10 @@ export async function login(formData: FormData){
         secure: process.env.NODE_ENV === "production",
     });
      redirect("/");
+}
+
+export async function logout(){
+    const store = await cookies();
+    store.delete("auth_token");
+    redirect("/");
 }
