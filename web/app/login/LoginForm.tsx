@@ -1,10 +1,13 @@
 "use client"
 
 import {useActionState} from "react";
+import {useSearchParams} from "next/navigation";
 import {login} from "@/lib/auth/actions";
 import Link from "next/link";
 
 export default function LoginForm() {
+    const searchParams = useSearchParams();
+    const next = searchParams.get("next") ?? "";
     const [state, formAction, pending] = useActionState(
         async (_prev: { error?: string } | null, formData: FormData) => {
             return await login(formData)
@@ -13,6 +16,7 @@ export default function LoginForm() {
 
     return (
         <form action={formAction} className="space-y-4 max-w-sm">
+            <input type="hidden" name="next" value = {next}/>
             <div>
                 <label className="block text-sm font-medium mb-1">Username</label>
                 <input

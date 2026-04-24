@@ -16,6 +16,8 @@ export async function login(formData: FormData){
         return { error: "Username and password required"};
     }
 
+    const next = String(formData.get("next") ?? "/");
+
     const res = await fetch(`${API_BASE_URL}/api/auth/login`,{
         method: "POST",
         headers: {"Content-Type": "application/json"},
@@ -29,7 +31,9 @@ export async function login(formData: FormData){
 
     const data = (await res.json()) as AuthResponse;
     await setAuthCookie(data.token!);
-     redirect("/");
+    const safeNext = next.startsWith("/") &&
+        !next.startsWith("//") ? next : "/"
+     redirect(safeNext);
 }
 
 export async function logout(){
@@ -50,6 +54,7 @@ export async function register(formData: FormData){
     if (password.length < 8){
         return {error: "Password must be at least 8 characters"};
     }
+    const next = String(formData.get("next") ?? "/");
 
     const res = await fetch(`${API_BASE_URL}/api/auth/register`, {
         method: "POST",
@@ -72,7 +77,9 @@ export async function register(formData: FormData){
 
     const data = (await res.json()) as AuthResponse;
     await setAuthCookie(data.token!);
-    redirect("/");
+    const safeNext = next.startsWith("/") &&
+        !next.startsWith("//") ? next : "/"
+    redirect(safeNext);
 }
 
 async function setAuthCookie(token: string){

@@ -3,9 +3,12 @@
 import {useActionState} from "react";
 import {register} from "@/lib/auth/actions";
 import Link from "next/link";
+import {useSearchParams} from "next/navigation";
 
 
 export default function RegisterForm() {
+    const searchParams = useSearchParams();
+    const next = searchParams.get("next") ?? "";
     const [state, formAction, pending] = useActionState(
         async (_prev: { error?: string } | null, formData: FormData) => {
             return await register(formData)
@@ -14,6 +17,7 @@ export default function RegisterForm() {
 
     return (
         <form action={formAction} className="space-y-4 max-w-sm">
+            <input type="hidden" name="next" value = {next}/>
             <div>
                 <label className="block text-sm font-medium mb-1">Username</label>
                 <input

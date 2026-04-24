@@ -1,5 +1,7 @@
 import RegisterForm from "@/app/register/RegisterForm";
 
+export const dynamic = "force-dynamic";
+
 export default function RegisterPage(){
     return (
         <main className="mx-auto max-w-6xl px-6 py-12">
