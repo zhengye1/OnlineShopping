@@ -14,5 +14,5 @@ export default async function AuthButton(){
             </Link>
         );
     }
-    return <UserMenu username={session.username} />
+    return <UserMenu session={session} />
 }
