@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import type {components} from "@/lib/api/types";
 import type {Cart} from "@/lib/cart/types";
 import {migrateCart} from "@/lib/cart/migrate";
+import {revalidatePath} from "next/cache";
 
 type AuthResponse = components["schemas"]["AuthResponse"];
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
@@ -37,12 +38,14 @@ export async function login(formData: FormData){
     await migrateGuestCartIfAny(data.token!);
     const safeNext = next.startsWith("/") &&
         !next.startsWith("//") ? next : "/"
-     redirect(safeNext);
+    revalidatePath("/", "layout");
+    redirect(safeNext);
 }
 
 export async function logout(){
     const store = await cookies();
     store.delete("auth_token");
+    revalidatePath("/", "layout");
     redirect("/");
 }
 
@@ -84,6 +87,7 @@ export async function register(formData: FormData){
     await migrateGuestCartIfAny(data.token!);
     const safeNext = next.startsWith("/") &&
         !next.startsWith("//") ? next : "/"
+    revalidatePath("/", "layout");
     redirect(safeNext);
 }
 

@@ -2,11 +2,116 @@
 import {cookies} from "next/headers";
 import {revalidatePath} from "next/cache";
 import type {Cart} from "@/lib/cart/types";
+import {authFetch, TokenExpiredError} from "@/lib/api/authFetch";
+import {redirect} from "next/navigation";
 
 const CART_COOKIE="cart"
+const AUTH_COOKIE = "auth_token"
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 30;  // 30 days in seconds
+const API_BASE_URL =
+    process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"
 
 export async function addToCart(productId: number, quantity: number){
+    const token = await getAuthToken();
+    try {
+        if (token){
+            await addToBackendCart(token, productId, quantity);
+        }else{
+            await addToGuestCart(productId, quantity);
+        }
+    }catch(err){
+        if (err instanceof TokenExpiredError){
+            const store = await cookies();
+            store.delete(AUTH_COOKIE);
+            redirect(`/login?next=/products`);
+        }
+        throw err;
+    }
+
+    // Tell Next: /cart page's cache HTML is stale, re-render next request
+    revalidatePath("/cart");
+    revalidatePath("/");
+}
+export async function removeFromCart(productId: number) {
+    const token = await getAuthToken();
+    try {
+        if (token) {
+            await removeFromBackendCart(token, productId);
+        } else {
+            await removeFromGuestCart(productId);
+        }
+    }catch(err){
+        if (err instanceof TokenExpiredError){
+            const store = await cookies();
+            store.delete(AUTH_COOKIE);
+            redirect(`/login?next=products`)
+        }
+        throw err;
+    }
+    revalidatePath("/cart");
+    revalidatePath("/");
+}
+export async function updateQuantity(productId: number, formData: FormData){
+    const quantity = Number(formData.get("quantity"));
+    // Edge case: 0 or negative -> treat as remove
+    if (!Number.isFinite(quantity) || quantity < 1){
+        return removeFromCart(productId);
+    }
+    const token = await getAuthToken();
+    try {
+        if (token) {
+            await updateBackendCartQuantity(token, productId, quantity);
+        } else {
+            await updateGuestCartQuantity(productId, quantity);
+        }
+    }catch(err){
+        if (err instanceof TokenExpiredError){
+            const store = await cookies();
+            store.delete(AUTH_COOKIE);
+            redirect(`/login?next=products`)
+        }
+        throw err;
+    }
+    revalidatePath("/cart");
+    revalidatePath("/");
+}
+
+export async function clearCart(){
+    const token = await getAuthToken();
+    try {
+        if (token) {
+            await clearBackendCart(token);
+        } else {
+            await clearGuestCart();
+        }
+    }catch(err){
+        if (err instanceof TokenExpiredError){
+            const store = await cookies();
+            store.delete(AUTH_COOKIE);
+            redirect(`/login?next=products`);
+        }
+    }
+    revalidatePath("/cart");
+    revalidatePath("/");
+}
+
+async function getAuthToken(): Promise<string | null> {
+    const store = await cookies();
+    return store.get(AUTH_COOKIE)?.value ?? null;
+}
+
+async function addToBackendCart(token:string, productId:number, quantity:number){
+    const res = await authFetch(token, `${API_BASE_URL}/api/cart`,{
+        headers:{"Content-Type": "application/json"},
+        method: "POST",
+        body: JSON.stringify({productId, quantity}),
+    });
+    if (!res.ok) {
+        throw new Error("add to cart failed");
+    }
+}
+
+async function addToGuestCart(productId:number, quantity:number){
     const store = await cookies();
     const raw = store.get(CART_COOKIE)?.value;
 
@@ -22,22 +127,27 @@ export async function addToCart(productId: number, quantity: number){
 
     // Merge: if product already in cart, accumulate quantity
     const existing  = cart.items.find(item => item.productId === productId);
-    if (existing){
+    if (existing) {
         existing.quantity += quantity;
     }else{
         cart.items.push({productId, quantity});
     }
 
-    // Write cookie back
-    store.set(CART_COOKIE, JSON.stringify(cart), {
+    store.set(CART_COOKIE, JSON.stringify(cart),{
         path:"/",
         maxAge: COOKIE_MAX_AGE,
     });
-
-    // Tell Next: /cart page's cache HTML is stale, re-render next request
-    revalidatePath("/cart");
 }
-export async function removeFromCart(productId: number) {
+async function removeFromBackendCart(token:string,productId:number){
+    const res = await authFetch(token, `${API_BASE_URL}/api/cart/${productId}`,{
+        method: "DELETE",
+    });
+    if (!res.ok) {
+        throw new Error("Delete have issue");
+    }
+}
+
+async function removeFromGuestCart(productId:number){
     const store = await cookies();
     const raw = store.get(CART_COOKIE)?.value;
     if (!raw) return; // no cookies then nothing to do
@@ -52,15 +162,17 @@ export async function removeFromCart(productId: number) {
         path: "/",
         maxAge: COOKIE_MAX_AGE
     });
-    revalidatePath("/cart");
 }
-export async function updateQuantity(productId: number, formData: FormData){
-    const quantity = Number(formData.get("quantity"));
-    // Edge case: 0 or negative -> treat as remove
-    if (!Number.isFinite(quantity) || quantity < 1){
-        return removeFromCart(productId);
+async function updateBackendCartQuantity(token: string, productId: number, quantity: number) {
+    const res = await authFetch(token, `${API_BASE_URL}/api/cart/${productId}?quantity=${quantity}`,{
+        method: "PUT",
+    });
+    if (!res.ok) {
+        throw new Error("Update cart failed");
     }
+}
 
+async function updateGuestCartQuantity(productId:number, quantity:number){
     const store = await cookies();
     const raw = store.get(CART_COOKIE)?.value;
     if (!raw) return ;
@@ -79,12 +191,18 @@ export async function updateQuantity(productId: number, formData: FormData){
         path:"/",
         maxAge: COOKIE_MAX_AGE,
     });
-
-    revalidatePath("/cart");
 }
 
-export async function clearCart(){
+async function clearBackendCart(token: string){
+    const res = await authFetch(token, `${API_BASE_URL}/api/cart`,{
+        headers:{Authorization: `Bearer ${token}`},
+        method: "DELETE",
+    });
+    if (!res.ok) {
+        throw new Error("Clean backend cart failed");
+    }
+}
+async function clearGuestCart(){
     const store = await cookies();
     store.delete(CART_COOKIE);
-    revalidatePath("/cart");
 }
