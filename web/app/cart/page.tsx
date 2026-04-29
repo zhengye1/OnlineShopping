@@ -41,6 +41,10 @@ export default async function CartPage() {
                     ${(subtotal / 100).toFixed(2)}
                 </span>
             </div>
+            <Link href="/checkout"
+                  className="block rounded-md bg-blue-600 px-6 py-3 text-center
+                   text-white font-semibold hover:bg-blue-700">
+                Checkout</Link>
             <form action={clearCart} className="mt-4 flex justify-end">
                 <button
                     type="submit"

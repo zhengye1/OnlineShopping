@@ -21,6 +21,10 @@ export default function UserMenu({session} : {session : Session}){
                           className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100">
                         Account
                     </Link>
+                    <Link href="/orders"
+                          className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100">
+                        My Orders
+                    </Link>
                     {session.role === "ADMIN" &&
                         <Link href="/admin"
                               className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100">

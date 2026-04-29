@@ -1,15 +1,14 @@
 import {cookies} from "next/headers";
 import type {Cart} from "./types";
 import {authFetch, TokenExpiredError} from "@/lib/api/authFetch";
+import {BACKEND_URL} from "@/lib/config";
 
 const CART_COOKIE = "cart";
 const AUTH_COOKIE = "auth_token";
-const API_BASE_URL =
-    process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
 const EMPTY_CART: Cart = {items: []};
 
 async function getBackendCart(token:string):Promise<Cart>{
-    const res = await authFetch(token, `${API_BASE_URL}/api/cart`,{
+    const res = await authFetch(token, `${BACKEND_URL}/api/cart`,{
     });
     if (!res.ok) {
         return EMPTY_CART;

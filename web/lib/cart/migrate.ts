@@ -1,6 +1,5 @@
 import type {Cart} from "@/lib/cart/types";
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
+import {BACKEND_URL} from "@/lib/config";
 
 /**
  * Migrate guest cart items to backend user cart.
@@ -14,7 +13,7 @@ export async function migrateCart(token: string, cart: Cart):Promise<number>{
     if (!cart.items || cart.items.length === 0) return 0;
     const results = await Promise.allSettled(
         cart.items.map(item =>
-            fetch(`${API_BASE_URL}/api/cart`,{
+            fetch(`${BACKEND_URL}/api/cart`,{
                 method: "POST",
                 headers: {
                     "Content-Type":"application/json",

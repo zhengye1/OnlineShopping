@@ -4,12 +4,12 @@ import {revalidatePath} from "next/cache";
 import type {Cart} from "@/lib/cart/types";
 import {authFetch, TokenExpiredError} from "@/lib/api/authFetch";
 import {redirect} from "next/navigation";
+import {BACKEND_URL} from "@/lib/config";
 
 const CART_COOKIE="cart"
 const AUTH_COOKIE = "auth_token"
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 30;  // 30 days in seconds
-const API_BASE_URL =
-    process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"
+
 
 export async function addToCart(productId: number, quantity: number){
     const token = await getAuthToken();
@@ -101,7 +101,7 @@ async function getAuthToken(): Promise<string | null> {
 }
 
 async function addToBackendCart(token:string, productId:number, quantity:number){
-    const res = await authFetch(token, `${API_BASE_URL}/api/cart`,{
+    const res = await authFetch(token, `${BACKEND_URL}/api/cart`,{
         headers:{"Content-Type": "application/json"},
         method: "POST",
         body: JSON.stringify({productId, quantity}),
@@ -139,7 +139,7 @@ async function addToGuestCart(productId:number, quantity:number){
     });
 }
 async function removeFromBackendCart(token:string,productId:number){
-    const res = await authFetch(token, `${API_BASE_URL}/api/cart/${productId}`,{
+    const res = await authFetch(token, `${BACKEND_URL}/api/cart/${productId}`,{
         method: "DELETE",
     });
     if (!res.ok) {
@@ -164,7 +164,7 @@ async function removeFromGuestCart(productId:number){
     });
 }
 async function updateBackendCartQuantity(token: string, productId: number, quantity: number) {
-    const res = await authFetch(token, `${API_BASE_URL}/api/cart/${productId}?quantity=${quantity}`,{
+    const res = await authFetch(token, `${BACKEND_URL}/api/cart/${productId}?quantity=${quantity}`,{
         method: "PUT",
     });
     if (!res.ok) {
@@ -194,7 +194,7 @@ async function updateGuestCartQuantity(productId:number, quantity:number){
 }
 
 async function clearBackendCart(token: string){
-    const res = await authFetch(token, `${API_BASE_URL}/api/cart`,{
+    const res = await authFetch(token, `${BACKEND_URL}/api/cart`,{
         headers:{Authorization: `Bearer ${token}`},
         method: "DELETE",
     });
