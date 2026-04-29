@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getProduct } from "@/lib/api/client";
-import AddToCartButton from "./AddToCartButton";                  // ⑨ server page 引入 client component
+import AddToCartButton from "./AddToCartButton"; // ⑨ server page 引入 client component
 
 export default async function ProductPage({
   params,
@@ -21,9 +21,9 @@ export default async function ProductPage({
         ← Back to home
       </Link>
 
-      <div className="grid md:grid-cols-2 gap-8">                  {/* Tailwind grid：mobile 1-col，md+ 2-col */}
+      <div className="grid md:grid-cols-2 gap-8"> {/* Tailwind grid：mobile 1-col，md+ 2-col */}
         <div className="aspect-square bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden">
-          {product.imageUrl ? (                                    // ① ternary
+          {product.imageUrl ? ( // ① ternary
             <img
               src={product.imageUrl}
               alt={product.name}

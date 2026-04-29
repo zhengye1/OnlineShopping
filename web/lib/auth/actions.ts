@@ -5,9 +5,9 @@ import type {components} from "@/lib/api/types";
 import type {Cart} from "@/lib/cart/types";
 import {migrateCart} from "@/lib/cart/migrate";
 import {revalidatePath} from "next/cache";
+import {BACKEND_URL} from "@/lib/config";
 
 type AuthResponse = components["schemas"]["AuthResponse"];
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
 const AUTH_COOKIE = "auth_token";
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
 
@@ -21,7 +21,7 @@ export async function login(formData: FormData){
 
     const next = String(formData.get("next") ?? "/");
 
-    const res = await fetch(`${API_BASE_URL}/api/auth/login`,{
+    const res = await fetch(`${BACKEND_URL}/api/auth/login`,{
         method: "POST",
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify({username, password}),
@@ -63,7 +63,7 @@ export async function register(formData: FormData){
     }
     const next = String(formData.get("next") ?? "/");
 
-    const res = await fetch(`${API_BASE_URL}/api/auth/register`, {
+    const res = await fetch(`${BACKEND_URL}/api/auth/register`, {
         method: "POST",
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify({username, email, password}),
